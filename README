@@ -1,0 +1,55 @@
+munix notes...
+
+Munix filesystem [MFS] organisation (8M are accessed):
+    offset      size        name/usage
+    0x000000    2K          MBR, GPT, etc.
+    0x000800    6K          MBT (*)
+    0x002000    8180K       user data
+    0x7ff000    4K          null page
+
+    (*) MBT (MFS BLOCK TABLE, e.g. my FAT12), entry size = 12 bits
+    value       meaning
+    0x000       free
+    0x001       last block within disk
+    0x002       system reserved block
+    0x003       corrupted block
+    0xfff       last block within file
+    over        value=next block within file
+
+    Directory Entry [32 bytes]:
+    offset      size        name/usage
+    0           1           flags (**)
+    1           15          filename
+    16          2           first block within file
+    18          6           free
+    24          4           creation time (ctime)
+    28          4           last modification time (mtime)
+    (**) flags: pdhl-rwx: (p)resent,d(irectory),h(idden),l(inear),r(eadable),w(ritable),e(x)ecutable
+    dirent[0]=".", dirent[1]=".."
+
+Memory Map:
+    offset      size        name/usage
+    0x00000     1K          IDT
+    0x00400     0.25K       BDA
+    0x00500     2.75K       MBR
+    0x01000     4K          boot/init.sys
+    0x02000     6K          MFS MBT                     <-- fs=0x200
+    0x03800     50K         stack                       <-- ss=0x380
+    0x10000     64K         user program
+    0x20000     192K        unused
+    0x50000     64K         shell (by default, /bin/shell)
+    0x60000     64K         allocatable memory (***)    <-- gs=0x6000
+    0x70000     64K         boot/munix.sys
+    0x80000     512K        hardware mapped
+
+    (***) first page is memory map, entry = 1 byte, 0 if free, 1 if used
+
+Boot sequence:
+    Munix-compatable MBR (tools/masterboot.asm) sets up MBT, loads /boot/munix.sys [munix] and /boot/init.sys [init] to memory
+    munix initializes drivers, sets up interrupts, etc. and executes init.sys
+    init looks up for /boot/init.config parses it and executes shell
+
+Executables in munix:
+    executable files have raw binary format
+    when program is launched, es:si=args (args are separetad by '\0' character), cx=argc, ds,fs,gs segments are unset
+    note, that both kernel and user programs uses the same stack

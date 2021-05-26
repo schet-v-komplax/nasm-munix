@@ -1,12 +1,13 @@
 MAXINTLEN   equ 9
 
 intstr      db "0123456789abcdef"
+fsstatbuf   db  "#d files, #d/#d free blocks", 13, 10, 0
 dump_fmt    db "#4x:#4x  #2x #2x #2x #2x #2x #2x #2x #2x  #2x #2x #2x #2x #2x #2x #2x #2x  |#c#c#c#c#c#c#c#c#c#c#c#c#c#c#c#c| ", 0
 bp_msg      db 13, 10, "breakpoint ###d", 13, 10
-            db "  ax      bx      cx      dx      si      di", 13, 10
-            db "#4x    #4x    #4x    #4x    #4x    #4x", 13, 10
-            db "  cs      ds      es      fs      gs", 13, 10
-            db "#4x    #4x    #4x    #4x    #4x", 13, 10
+            db "ax",9,"bx",9,"cx",9,"dx",9,"si",9,"di", 13, 10
+            db "#4x",9,"#4x",9,"#4x",9,"#4x",9,"#4x",9,"#4x", 13, 10
+            db "cs",9,"ds",9,"es",9,"fs",9,"gs", 13, 10
+            db "#4x",9,"#4x",9,"#4x",9,"#4x",9,"#4x", 13, 10
             db "ss:sp #4x:#4x", 13, 10
             db "cs:ip #4x:#4x", 13, 10
             db "flags #4x", 13, 10, 0
@@ -51,6 +52,7 @@ pr_fmt2:
     cmp     al, 'x'
     je      print16
 pr_out:
+    mov     ah, 1
     int     0x24
     jmp     pr_fmt
 pr_ret:
@@ -67,6 +69,7 @@ prs_out:
     lodsb
     or      al, al
     jz      prs_ret
+    mov     ah, 1
     int     0x24
     jmp     prs_out
 prs_ret:
@@ -107,13 +110,14 @@ pri_ok:
 
 nlcr:
     push    ax
-    mov     al, 0x0a
+    mov     ax, 0x010a
     int     0x24
-    mov     ax, 0x0d
+    mov     ax, 0x010d
     int     0x24
     pop     ax
     ret
 
+brk:
 breakpoint:
     pop     word [cs:bp_ip]
     pop     word [cs:bp_cs]
@@ -145,8 +149,8 @@ breakpoint:
     push    cs
     pop     ds
     call    printk
-    xor     ah, ah
-    int     0x16
+    mov     ah, 0x02
+    int     0x24
     popa
     pop     es
     pop     ds

@@ -8,6 +8,19 @@ OBJCOPY	:= objcopy
 MAKE	:= make -s
 NASM	:= nasm -f bin -w-zeroing
 
+image 	:= munix.img
+version	:= 0.05
+
+world 	+= tools/boot
+world 	+= tools/install
+world 	+= tools/mkfs
+
+world 	+= fs/boot/munix.sys
+
+world 	+= fs/drivers/blk.sys
+world 	+= fs/drivers/con.sys
+world 	+= fs/drivers/mm.sys
+
 %: %.c			# c files -> elf
 	$(Q)echo $<...
 	$(Q)$(CC) -o $@ $<
@@ -22,25 +35,8 @@ NASM	:= nasm -f bin -w-zeroing
 	$(Q)$(NASM) -o $@ $<
 	$(Q)chmod +x $@
 
-image 	:= munix.img
-
-world 	+= tools/build
-world 	+= tools/install
-world 	+= tools/masterboot
-
-world 	+= fs/bin/cat
-world 	+= fs/bin/clear
-world 	+= fs/bin/fsstat
-world 	+= fs/bin/hexdump
-world 	+= fs/bin/ls
-world 	+= fs/bin/shell
-world 	+= fs/bin/stat
-
-world 	+= fs/boot/init.sys
-world 	+= fs/boot/munix.sys
-
 $(image): $(world)
-	tools/build r=fs b=tools/masterboot > $(image)
+	tools/mkfs v=$(version) s=8M c=fs d=[/drivers/mm.sys:34,/drivers/blk.sys:35,/drivers/con.sys:36] b=tools/boot > $(image)
 
 .PHONY: clean
 clean:
@@ -58,8 +54,8 @@ hex:
 	hexdump -C $(image)
 	$(Q)$(MAKE) clean
 
-.PHONY: test
-test:
+.PHONY: run
+run:
 	$(Q)$(MAKE) clean
 	$(Q)rm -f $(image)
 	$(Q)$(MAKE) $(image)

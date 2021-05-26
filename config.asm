@@ -1,76 +1,73 @@
-FALSE       equ 0
-TRUE        equ 1
-PAGE        equ 0x800
+TRUE            equ 1
+FALSE           equ 0
+DEBUG           equ TRUE
 
-DEBUG       equ TRUE
+GET             equ 0
+SET             equ 1
 
-NR_FILES    equ 10
-NR_NODES    equ 20
-NR_SYSCALLS equ 32
-FIRST_BLOCK equ 4
+BLOCK           equ 2048
+SECTOR          equ 512
+BLOCK_LOG       equ 11
+SECTOR_LOG      equ 9
 
-STACKSIZE   equ 0xc800                  ; 50K
-BOOTSEG     equ 0x0050                  ; MBR
-INITSEG     equ 0x0100                  ; /boot/init.sys
-MBTSEG      equ 0x0200                  ; fs
-STACKSEG    equ 0x0380
-USERSEG     equ 0x1000
-USTACKSEG   equ 0x2000                  ; user stack
-SHELLSEG    equ 0x5000
-ALLOCSEG    equ 0x6000
-MUNIXSEG    equ 0x7000                  ; /boot/munix.sys
+NR_DISKS        equ 4
+NR_FILES        equ 8
+NR_SYSCALLS     equ 16
+NR_BUFFERS      equ 32
 
-F_PRESENT   equ 0x80
-F_DIR       equ 0x40
-F_HIDDEN    equ 0x20
-F_LINEAR    equ 0x10                    ; linear block order
-F_READ      equ 0x04
-F_WRITE     equ 0x02
-F_EXEC      equ 0x01
+INITSEG         equ 0x0050
+BUFSEG          equ 0x5000
+KERNSEG         equ 0x6000
+DRVSEG          equ 0x7000
 
-O_EXEC      equ 1
-O_WRITE     equ 2
-O_READ      equ 4
-O_AHEAD     equ 8                       ; r/w ahead
-O_CLEAR     equ 16                      ; clear opened file
-O_RW        equ (O_READ | O_WRITE)
-
-SET         equ 0
-GET         equ 1
-
-L_SET       equ SET
-L_GET       equ GET
-H_SET       equ SET
-H_GET       equ GET
-
-struc MBR
-    mbr_jmp     resw 1
-    mbr_sign    resb 10
-    mbr_munix   resw 1
-    mbr_init    resw 1
-    mbr_root    resw 1                  ; root dir size
+struc diskdata
+    d_flags     resb 1                  ; 0=free
+    d_disk      resb 1                  ; disk actual number
+    d_sectors   resw 1
+    d_heads     resw 1
+    d_cylinders resw 1
 endstruc
 
-struc file                              ; directory entry
-    file_flags  resb 1
-    file_name   resb 15
-    file_block  resw 1                  ; first block withn file
-    file_count  resw 1                  ; bytes in file 
-    file_pad    resb 4                  ; unused
-    file_ctime  resd 1
-    file_mtime  resd 1
+struc disk
+    d_present   resb 1
+    d_data      resb 1                  ; diskdata struc, <0 if unused
+    d_mbt       resw 3                  ; mbt buffers
 endstruc
 
-struc node
-    n_buf       resw 1                  ; buffer address within gs. 0 if free
-    n_block     resw 1                  ; block number
-    n_owner     resw 1                  ; file fd, 0 if free
+struc file
+    f_flags     resb 1
+    f_name      resb 15
+    f_block     resw 1
+    f_size      resd 1
+    f_pad       resw 1
+    f_ctime     resd 1
+    f_mtime     resd 1
 endstruc
 
-struc fd                                ; file table entry
-    fd_file     resb file_size
-    fd_flags    resw 1                  ; READ, WRITE, etc. 0 if empty
-    fd_node     resw 1                  ; file's node
-    fd_parent   resw 1                  ; parent's node, -1 if none
-    fd_pos      resw 1
+F_PRESENT       equ 0x80
+F_DIR           equ 0x40
+F_HIDDEN        equ 0x20
+F_LINEAR        equ 0x10
+F_READ          equ 0x04
+F_WRITE         equ 0x02
+F_EXEC          equ 0x01
+
+struc fd
+    fd_flags    resb 1
+    fd_disk     resb 1
+    fd_file     resw 1                  ; offset of file within fs segment
+    fd_pos      resd 1
 endstruc
+
+B_FLUSH         equ 0x01                ; flush if changed
+B_KEEP          equ 0x02                ; keep in memory unless fd is closed
+B_PRESENT       equ 0x80
+
+struc buffer
+    b_flags     resb 1
+    b_disk      resb 1
+    b_fd        resw 1                  ; last accessed fd, used to free buffer on closing fd
+    b_block     resw 1
+    b_size      resw 1
+endstruc
+buffer_log      equ 3                   ; 2K block address=fs:'offset of buffer struc within buftab'<<(BLOCK_LOG-buffer_log)

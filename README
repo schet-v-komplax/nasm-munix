@@ -1,13 +1,13 @@
 munix notes...
 
-Munix filesystem [MFS] organisation (8M are accessed):
-    offset      size        name/usage
-    0x000000    2K          MBR, GPT, etc.
-    0x000800    6K          MBT (*)
-    0x002000    8180K       user data
-    0x7ff000    4K          null page
+Munix filesystem [MFS] organisation:
+    block       size        name/usage
+    0           1           boot block
+    1           3           MBT (*)
+    4           4091        user data
+    4095        1           unused
 
-    (*) MBT (MFS BLOCK TABLE, e.g. my FAT12), entry size = 12 bits
+    (*) MBT (MFS BLOCK TABLE, e.g. something like FAT12), entry size = 12 bits
     value       meaning
     0x000       free
     0x001       last block within disk
@@ -21,32 +21,84 @@ Munix filesystem [MFS] organisation (8M are accessed):
     0           1           flags (**)
     1           15          filename
     16          2           first block within file
-    18          6           free
+    18          4           total bytes count
+    20          2           unused
     24          4           creation time (ctime)
     28          4           last modification time (mtime)
     (**) flags: pdhl-rwx: (p)resent,d(irectory),h(idden),l(inear),r(eadable),w(ritable),e(x)ecutable
     dirent[0]=".", dirent[1]=".."
 
-Memory Map:
-    offset      size        name/usage
+    MBR:
+    offset      size        usage
+    0           2           0x2eeb jmp opcode
+    2           6           signature (e.g. "Munix ")
+    8           4           version
+    12          2           first block within kernel
+    14          2           number of drivers (up to 16)
+    16          32          driver list (each word is first block within driver, 0=unused)
+    48          398         source code
+    446         64          partition table
+    510         2           0xaa55 signature
+
+    all drivers and kernel have .sys format:
+    .sys file format:
+    offset      size        usage
+    0           2           magic: 0x7f7f for munix, 0xii7f for driver; [ii] is used interrupt number (0 if unused)
+    2           11          filename within parent directory without ".sys" extention
+    13          1           number of blocks, up to 2 for driver, up to 15 for kernel
+    14          2           first block within parent directory           
+    16          ...         source code
+
+Memory Map (1M is accessed):
+    address     size        name/usage
     0x00000     1K          IDT
     0x00400     0.25K       BDA
     0x00500     2.75K       MBR
-    0x01000     4K          boot/init.sys
-    0x02000     6K          MFS MBT                     <-- fs=0x200
-    0x03800     50K         stack                       <-- ss=0x380
-    0x10000     64K         user program
-    0x20000     192K        unused
-    0x50000     64K         shell (by default, /bin/shell)
-    0x60000     64K         allocatable memory (***)    <-- gs=0x6000
-    0x70000     64K         boot/munix.sys
+    0x01000     188K        allocatable memory
+    0x30000     64K         user program                <-- gs=0x3000
+    0x40000     64K         shell
+    0x50000     64K         buffers                     <-- fs=0x5000
+    0x60000     64K         munix.sys
+    0x70000     64K         drivers
     0x80000     512K        hardware mapped
 
-    (***) first page is memory map, entry = 1 byte, 0 if free, 1 if used
+Interrupts:
+    int         function/usage          input                                   output (ah<0 if error)
+    0x03        breakpoint
+    0x20        terminate program       ax=error code
+    0x21        system calls
+        ah=0
+        ah=1
+        ah=2    get/set file pos
+                al=GET                  bx=fd                                   dx cx=file pos
+                al=SET                  bx=fd, dx cx=file pos
+        ah=3    write into file         bx=fd,gs:cx=buf,dx=count                ax=count of written bytes
+        ah=4    read from file          bx=fd,gs:cx=buf,dx=count                ax=count of read bytes
+        ah=5    open file               gs:bx=path                              bx=fd
+        ah=6    close file              bx=fd
+    0x22        mm
+        ah=0    allocate memory         cx=size(in bytes)                       ax:0=address, ax=0 if not enough space
+        ah=1    free memory             bx:0=address                            ax=error
+        ah=2    get size of the largest free memory block                       ax=size in 16-byte blocks
+        ah=3    get free space                                                  ax=nubmer of free 16-byte blocks
+        ah=4    get number of free nodes                                        ax=number of free nodes
+    0x23        blk i/o
+        ah=0    reset system
+        ah=1    initialize disk         dl=disk number                          al=disk handler (disk)
+        ah=2    unused
+        ah=3    write block             al=disk,es:bx=buffer,dx=block
+        ah=4    read block              al=disk,es:bx=buffer,dx=block
+    0x24        console i/o
+        ah=0    clear screen
+        ah=1    put character           al=character
+        ah=2    get character                                                   al=character
+        ah=3    write message           gs:bx=buffer,cx=length(0 if write until buffer ends)
+        ah=4    read message            gs:bx=buffer,cx=length
+
 
 Boot sequence:
-    Munix-compatable MBR (tools/masterboot.asm) sets up MBT, loads /boot/munix.sys [munix] and /boot/init.sys [init] to memory
-    munix initializes drivers, sets up interrupts, etc. and executes init.sys
+    Munix-compatable MBR (tools/masterboot.asm) loads and initializes drivers, loads /boot/munix.sys [munix] into memory
+    munix initializes system and executes /boot/init.sys
     init looks up for /boot/init.config parses it and executes shell
 
 Executables in munix:
